@@ -58,14 +58,18 @@ void print_usage(const char *prog) {
     printf("  -g, --gain GAIN        Tuner gain in dB (default: auto)\n");
     printf("  -d, --device INDEX     RTL-SDR device index (default: 0)\n");
     printf("  -o, --output FILE      Output audio file (WAV format)\n");
+    printf("  -q, --squelch LEVEL    Signal strength threshold (default: 15)\n");
+    printf("                         Lower=more sensitive, Higher=less noise\n");
     printf("  -r, --realtime-audio   Enable real-time audio playback 🔊\n");
     printf("  -G, --gui              Enable GTK+ graphical interface 🖥️\n");
     printf("  -v, --verbose          Verbose output\n");
     printf("  -k, --use-vulnerability Use known TEA1 vulnerability\n");
     printf("  -h, --help             Show this help\n\n");
     printf("Examples:\n");
-    printf("  %s -f 420000000 -v              # Listen on 420 MHz\n", prog);
-    printf("  %s -f 420000000 -k -r -v        # Decrypt and hear audio in real-time\n", prog);
+    printf("  %s -f 420000000 -v                    # Listen on 420 MHz\n", prog);
+    printf("  %s -f 420000000 -k -r -v              # Decrypt and hear audio in real-time\n", prog);
+    printf("  %s -f 420000000 -q 20 -k -v           # Higher squelch (less noise)\n", prog);
+    printf("  %s -f 420000000 -q 10 -k -v           # Lower squelch (more sensitive)\n", prog);
     printf("  %s -f 420000000 -k -o audio.wav # Crack and save audio\n", prog);
     printf("  %s -f 420000000 -G              # Launch with graphical interface\n", prog);
     printf("\n");
@@ -151,6 +155,7 @@ int main(int argc, char **argv) {
         {"gain", required_argument, 0, 'g'},
         {"device", required_argument, 0, 'd'},
         {"output", required_argument, 0, 'o'},
+        {"squelch", required_argument, 0, 'q'},
         {"realtime-audio", no_argument, 0, 'r'},
         {"gui", no_argument, 0, 'G'},
         {"verbose", no_argument, 0, 'v'},
@@ -177,6 +182,9 @@ int main(int argc, char **argv) {
                 break;
             case 'o':
                 g_config.output_file = optarg;
+                break;
+            case 'q':
+                g_config.squelch_threshold = atof(optarg);
                 break;
             case 'r':
                 g_config.enable_realtime_audio = true;

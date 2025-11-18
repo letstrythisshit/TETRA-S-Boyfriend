@@ -87,6 +87,7 @@ typedef struct {
     float *q_samples;
     int sample_count;
     float symbol_timing;
+    float squelch_threshold;
     uint8_t *demod_bits;
     int bit_count;
     detection_params_t *params;      // Pointer to shared detection parameters
