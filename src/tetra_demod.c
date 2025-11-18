@@ -45,18 +45,16 @@ int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len) {
         return -1;
     }
 
-    // Convert uint8 I/Q samples to float
+    // Convert uint8 I/Q samples to float and separate I/Q
     uint32_t sample_pairs = len / 2;
     if (sample_pairs > (uint32_t)demod->sample_count) {
         sample_pairs = demod->sample_count;
     }
 
-    convert_uint8_to_float(iq_data, demod->i_samples, sample_pairs * 2);
-
-    // Separate I and Q
+    // Convert and separate I/Q in one pass to avoid buffer issues
     for (uint32_t i = 0; i < sample_pairs; i++) {
-        demod->i_samples[i] = demod->i_samples[i * 2] - 127.5f;
-        demod->q_samples[i] = demod->i_samples[i * 2 + 1] - 127.5f;
+        demod->i_samples[i] = (float)iq_data[i * 2] - 127.5f;
+        demod->q_samples[i] = (float)iq_data[i * 2 + 1] - 127.5f;
     }
 
     // Perform quadrature demodulation
