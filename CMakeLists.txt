@@ -29,6 +29,12 @@ find_library(PTHREAD_LIB pthread)
 find_library(M_LIB m)
 find_library(ASOUND_LIB asound)
 
+# Find GTK3 for GUI support
+find_package(PkgConfig)
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(GTK3 gtk+-3.0)
+endif()
+
 if(NOT RTLSDR_LIB)
     message(WARNING "librtlsdr not found - RTL-SDR support will be disabled")
     set(RTLSDR_LIB "")
@@ -41,6 +47,17 @@ if(NOT ASOUND_LIB)
 else()
     message(STATUS "ALSA support enabled for real-time audio playback")
     add_definitions(-DHAVE_ALSA)
+endif()
+
+if(GTK3_FOUND)
+    message(STATUS "GTK3 found - GUI support enabled")
+    add_definitions(-DHAVE_GTK)
+    include_directories(${GTK3_INCLUDE_DIRS})
+    link_directories(${GTK3_LIBRARY_DIRS})
+    add_definitions(${GTK3_CFLAGS_OTHER})
+else()
+    message(WARNING "GTK3 not found - GUI support will be disabled")
+    message(STATUS "To enable: sudo apt-get install libgtk-3-dev")
 endif()
 
 # Source files
@@ -57,6 +74,11 @@ set(SOURCES
     src/utils.c
 )
 
+# Add GUI source if GTK3 is available
+if(GTK3_FOUND)
+    list(APPEND SOURCES src/gui.c)
+endif()
+
 # Main executable
 add_executable(tetra_analyzer ${SOURCES})
 
@@ -67,6 +89,11 @@ target_link_libraries(tetra_analyzer
     ${M_LIB}
     ${ASOUND_LIB}
 )
+
+# Link GTK3 libraries if available
+if(GTK3_FOUND)
+    target_link_libraries(tetra_analyzer ${GTK3_LIBRARIES})
+endif()
 
 # Installation
 install(TARGETS tetra_analyzer DESTINATION bin)
