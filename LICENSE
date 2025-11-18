@@ -1,0 +1,63 @@
+Educational and Research Use License
+
+Copyright (c) 2024 TETRA Security Research Project
+
+EDUCATIONAL AND AUTHORIZED RESEARCH USE ONLY
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use
+the Software for educational, academic research, and authorized security
+testing purposes only, subject to the following conditions:
+
+PERMITTED USES:
+1. Educational study of cryptographic vulnerabilities
+2. Academic security research and publication
+3. Authorized penetration testing with explicit written permission
+4. Laboratory testing on equipment you own or control
+5. Security awareness training and demonstrations
+
+PROHIBITED USES:
+1. Unauthorized interception of communications
+2. Any use that violates local, state, federal, or international law
+3. Commercial exploitation without explicit permission
+4. Malicious activities of any kind
+5. Production deployment
+
+CONDITIONS:
+- The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+- Users must comply with all applicable laws and regulations regarding radio
+  frequency monitoring and encryption.
+- Users must obtain proper authorization before testing on systems they do
+  not own or control.
+- This software is provided for transparency and education about security
+  vulnerabilities, not for exploitation.
+
+LIABILITY DISCLAIMER:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+RESPONSIBLE DISCLOSURE:
+If you discover new vulnerabilities using this software:
+1. Do not exploit them for malicious purposes
+2. Report to appropriate authorities and affected vendors
+3. Follow coordinated disclosure practices
+4. Allow reasonable time for patches before public disclosure
+
+LEGAL NOTICE:
+Unauthorized interception or decryption of communications is illegal in most
+jurisdictions. Violators may be subject to criminal prosecution and civil
+penalties. The authors of this software assume no liability for misuse.
+
+BY USING THIS SOFTWARE, YOU AGREE TO:
+- Use it only for lawful, authorized, and ethical purposes
+- Take full responsibility for ensuring your use complies with all laws
+- Indemnify and hold harmless the authors from any misuse
+- Respect the privacy and security of others
+
+For questions about permitted use, contact the project maintainers.

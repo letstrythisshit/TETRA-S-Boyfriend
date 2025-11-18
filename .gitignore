@@ -1,0 +1,59 @@
+# Build directories
+build/
+cmake-build-*/
+
+# Compiled binaries
+tetra_analyzer
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.cmake
+install_manifest.txt
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Output files
+*.wav
+*.pcm
+*.raw
+*.bin
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+temp/
+
+# Core dumps
+core
+core.*
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Python (if adding Python bindings later)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Archives
+*.tar.gz
+*.zip
+*.7z
