@@ -41,7 +41,7 @@ typedef struct {
     bool verbose;
     bool use_known_vulnerability;
     bool enable_realtime_audio;
-    float squelch_threshold;  // Signal strength threshold (0-100)
+    bool enable_gui;
     char *output_file;
     int device_index;
 } tetra_config_t;
@@ -56,6 +56,30 @@ typedef struct {
     pthread_t thread;
 } rtl_sdr_t;
 
+// Dynamic detection parameters (configurable via GUI)
+typedef struct {
+    float min_signal_power;          // Minimum signal power threshold (default: 8.0)
+    int strong_match_threshold;      // Strong match bits required (default: 20/22)
+    int moderate_match_threshold;    // Moderate match bits required (default: 19/22)
+    float strong_correlation;        // Strong correlation threshold (default: 0.8)
+    float moderate_correlation;      // Moderate correlation threshold (default: 0.75)
+    float lpf_cutoff;                // Low-pass filter cutoff (default: 0.5)
+    float moderate_power_multiplier; // Power multiplier for moderate detection (default: 1.2)
+    pthread_mutex_t lock;            // Mutex for thread-safe parameter updates
+} detection_params_t;
+
+// Real-time status information
+typedef struct {
+    float current_signal_power;
+    int last_match_count;
+    float last_correlation;
+    int last_offset;
+    bool burst_detected;
+    uint64_t last_detection_time;
+    uint64_t detection_count;
+    pthread_mutex_t lock;            // Mutex for thread-safe status updates
+} detection_status_t;
+
 // TETRA demodulator state
 typedef struct {
     uint32_t frequency;
@@ -66,6 +90,8 @@ typedef struct {
     float squelch_threshold;
     uint8_t *demod_bits;
     int bit_count;
+    detection_params_t *params;      // Pointer to shared detection parameters
+    detection_status_t *status;      // Pointer to shared status information
 } tetra_demod_t;
 
 // TEA1 encryption context
@@ -116,10 +142,20 @@ void rtl_sdr_stop(rtl_sdr_t *sdr);
 void rtl_sdr_cleanup(rtl_sdr_t *sdr);
 
 // TETRA demodulation (tetra_demod.c)
-tetra_demod_t* tetra_demod_init(uint32_t sample_rate, float squelch_threshold);
+tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params, detection_status_t *status);
 int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len);
 bool tetra_detect_burst(tetra_demod_t *demod);
 void tetra_demod_cleanup(tetra_demod_t *demod);
+
+// Detection parameters management
+detection_params_t* detection_params_init(void);
+void detection_params_cleanup(detection_params_t *params);
+void detection_params_reset_defaults(detection_params_t *params);
+
+// Detection status management
+detection_status_t* detection_status_init(void);
+void detection_status_cleanup(detection_status_t *status);
+void detection_status_reset(detection_status_t *status);
 
 // TEA1 cryptography (tea1_crypto.c)
 void tea1_init(tea1_context_t *ctx, const uint8_t *key, bool use_vulnerability);
@@ -161,5 +197,14 @@ void tetra_codec_cleanup(tetra_codec_t *codec);
 void hex_dump(const uint8_t *data, size_t len, const char *label);
 uint64_t get_timestamp_us(void);
 void log_message(bool verbose, const char *format, ...);
+
+// GUI interface (gui.c)
+typedef struct tetra_gui_t tetra_gui_t;
+
+tetra_gui_t* tetra_gui_init(tetra_config_t *config, detection_params_t *params,
+                            detection_status_t *status, rtl_sdr_t *sdr);
+void tetra_gui_run(tetra_gui_t *gui);
+void tetra_gui_cleanup(tetra_gui_t *gui);
+void tetra_gui_update_status(tetra_gui_t *gui);
 
 #endif // TETRA_ANALYZER_H

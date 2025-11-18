@@ -14,7 +14,7 @@ static const uint8_t TETRA_TRAINING_SEQ[22] = {
     1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0
 };
 
-tetra_demod_t* tetra_demod_init(uint32_t sample_rate, float squelch_threshold) {
+tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params, detection_status_t *status) {
     tetra_demod_t *demod = calloc(1, sizeof(tetra_demod_t));
     if (!demod) {
         fprintf(stderr, "Failed to allocate demodulator structure\n");
@@ -37,6 +37,8 @@ tetra_demod_t* tetra_demod_init(uint32_t sample_rate, float squelch_threshold) {
 
     demod->bit_count = 0;
     demod->symbol_timing = 0.0f;
+    demod->params = params;
+    demod->status = status;
 
     log_message(true, "TETRA demodulator: squelch = %.1f (adjust with -q if needed)\n", squelch_threshold);
 
@@ -76,8 +78,14 @@ int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len) {
 
     quadrature_demod(demod->i_samples, demod->q_samples, demod_output, sample_pairs);
 
-    // Apply low-pass filter
-    low_pass_filter(demod_output, sample_pairs, 0.1f);
+    // Apply low-pass filter (using dynamic parameter from GUI)
+    float lpf_cutoff = 0.5f; // Default value
+    if (demod->params) {
+        pthread_mutex_lock(&demod->params->lock);
+        lpf_cutoff = demod->params->lpf_cutoff;
+        pthread_mutex_unlock(&demod->params->lock);
+    }
+    low_pass_filter(demod_output, sample_pairs, lpf_cutoff);
 
     // Symbol timing recovery and bit extraction (simplified)
     // Real implementation would use Gardner or Mueller-Müller timing recovery
@@ -100,37 +108,128 @@ bool tetra_detect_burst(tetra_demod_t *demod) {
         return false;
     }
 
-    // Search for training sequence in demodulated bits
+    // Load dynamic parameters (thread-safe)
+    float min_signal_power = 8.0f;
+    int strong_match_threshold = 20;
+    int moderate_match_threshold = 19;
+    float strong_correlation = 0.8f;
+    float moderate_correlation = 0.75f;
+    float moderate_power_multiplier = 1.2f;
+
+    if (demod->params) {
+        pthread_mutex_lock(&demod->params->lock);
+        min_signal_power = demod->params->min_signal_power;
+        strong_match_threshold = demod->params->strong_match_threshold;
+        moderate_match_threshold = demod->params->moderate_match_threshold;
+        strong_correlation = demod->params->strong_correlation;
+        moderate_correlation = demod->params->moderate_correlation;
+        moderate_power_multiplier = demod->params->moderate_power_multiplier;
+        pthread_mutex_unlock(&demod->params->lock);
+    }
+
+    // Step 1: Check signal power to reject pure noise
+    // Calculate RMS power from I/Q samples
+    float signal_power = detect_signal_strength(demod->i_samples, demod->q_samples,
+                                                 demod->sample_count);
+
+    // Update status with current signal power
+    if (demod->status) {
+        pthread_mutex_lock(&demod->status->lock);
+        demod->status->current_signal_power = signal_power;
+        pthread_mutex_unlock(&demod->status->lock);
+    }
+
+    if (signal_power < min_signal_power) {
+        log_message(true, "Signal power too low: %.2f < %.2f (rejecting noise)\n",
+                   signal_power, min_signal_power);
+        return false;
+    }
+
+    // Step 2: Search for training sequence in demodulated bits
     int best_match = 0;
     int best_offset = -1;
+    float best_correlation = 0.0f;
 
     for (int offset = 0; offset < demod->bit_count - 22; offset++) {
         int matches = 0;
+        float correlation = 0.0f;
 
+        // Count bit matches and calculate correlation
         for (int i = 0; i < 22; i++) {
             if (demod->demod_bits[offset + i] == TETRA_TRAINING_SEQ[i]) {
                 matches++;
+                correlation += 1.0f;
+            } else {
+                correlation -= 1.0f;
             }
         }
+
+        // Normalize correlation to [-1.0, 1.0]
+        correlation /= 22.0f;
 
         if (matches > best_match) {
             best_match = matches;
             best_offset = offset;
+            best_correlation = correlation;
         }
 
-        // STRICT: Require at least 20 out of 22 bits (91% match)
-        // This significantly reduces false positives from noise
-        if (matches >= 20) {
-            log_message(true, "✓ Valid TETRA burst at offset %d (%d/22 bits)\n",
-                       offset, matches);
+        // Strong match threshold (configurable via GUI)
+        if (matches >= strong_match_threshold && correlation >= strong_correlation) {
+            log_message(true, "TETRA burst detected at offset %d (%d/22 matches, corr=%.3f, power=%.2f)\n",
+                       offset, matches, correlation, signal_power);
+
+            // Update detection status
+            if (demod->status) {
+                pthread_mutex_lock(&demod->status->lock);
+                demod->status->burst_detected = true;
+                demod->status->last_match_count = matches;
+                demod->status->last_correlation = correlation;
+                demod->status->last_offset = offset;
+                demod->status->last_detection_time = get_timestamp_us();
+                demod->status->detection_count++;
+                pthread_mutex_unlock(&demod->status->lock);
+            }
+
             return true;
         }
     }
 
-    // No valid burst found - likely noise or wrong frequency
-    // In verbose mode, show what we got
-    if (best_match >= 17) {
-        log_message(false, "Weak sync: %d/22 bits (need ≥20 for valid TETRA)\n", best_match);
+    // Moderate detection threshold (configurable via GUI)
+    if (best_match >= moderate_match_threshold &&
+        best_correlation >= moderate_correlation &&
+        signal_power >= min_signal_power * moderate_power_multiplier) {
+        log_message(true, "TETRA burst detected (moderate) at offset %d (%d/22 matches, corr=%.3f, power=%.2f)\n",
+                   best_offset, best_match, best_correlation, signal_power);
+
+        // Update detection status
+        if (demod->status) {
+            pthread_mutex_lock(&demod->status->lock);
+            demod->status->burst_detected = true;
+            demod->status->last_match_count = best_match;
+            demod->status->last_correlation = best_correlation;
+            demod->status->last_offset = best_offset;
+            demod->status->last_detection_time = get_timestamp_us();
+            demod->status->detection_count++;
+            pthread_mutex_unlock(&demod->status->lock);
+        }
+
+        return true;
+    }
+
+    // Update status for rejection
+    if (demod->status) {
+        pthread_mutex_lock(&demod->status->lock);
+        demod->status->burst_detected = false;
+        demod->status->last_match_count = best_match;
+        demod->status->last_correlation = best_correlation;
+        demod->status->last_offset = best_offset;
+        pthread_mutex_unlock(&demod->status->lock);
+    }
+
+    // Log rejection for debugging
+    if (best_match >= 15) {
+        log_message(true, "Rejected: insufficient quality (matches=%d/22, corr=%.3f, power=%.2f)\n",
+                   best_match, best_correlation, signal_power);
     }
 
     return false;
@@ -143,4 +242,76 @@ void tetra_demod_cleanup(tetra_demod_t *demod) {
         free(demod->demod_bits);
         free(demod);
     }
+}
+
+// Detection parameters management
+
+detection_params_t* detection_params_init(void) {
+    detection_params_t *params = calloc(1, sizeof(detection_params_t));
+    if (!params) {
+        fprintf(stderr, "Failed to allocate detection parameters\n");
+        return NULL;
+    }
+
+    pthread_mutex_init(&params->lock, NULL);
+    detection_params_reset_defaults(params);
+
+    return params;
+}
+
+void detection_params_cleanup(detection_params_t *params) {
+    if (params) {
+        pthread_mutex_destroy(&params->lock);
+        free(params);
+    }
+}
+
+void detection_params_reset_defaults(detection_params_t *params) {
+    if (!params) return;
+
+    pthread_mutex_lock(&params->lock);
+    params->min_signal_power = 8.0f;
+    params->strong_match_threshold = 20;
+    params->moderate_match_threshold = 19;
+    params->strong_correlation = 0.8f;
+    params->moderate_correlation = 0.75f;
+    params->lpf_cutoff = 0.5f;
+    params->moderate_power_multiplier = 1.2f;
+    pthread_mutex_unlock(&params->lock);
+}
+
+// Detection status management
+
+detection_status_t* detection_status_init(void) {
+    detection_status_t *status = calloc(1, sizeof(detection_status_t));
+    if (!status) {
+        fprintf(stderr, "Failed to allocate detection status\n");
+        return NULL;
+    }
+
+    pthread_mutex_init(&status->lock, NULL);
+    detection_status_reset(status);
+
+    return status;
+}
+
+void detection_status_cleanup(detection_status_t *status) {
+    if (status) {
+        pthread_mutex_destroy(&status->lock);
+        free(status);
+    }
+}
+
+void detection_status_reset(detection_status_t *status) {
+    if (!status) return;
+
+    pthread_mutex_lock(&status->lock);
+    status->current_signal_power = 0.0f;
+    status->last_match_count = 0;
+    status->last_correlation = 0.0f;
+    status->last_offset = -1;
+    status->burst_detected = false;
+    status->last_detection_time = 0;
+    status->detection_count = 0;
+    pthread_mutex_unlock(&status->lock);
 }
