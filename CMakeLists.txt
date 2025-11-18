@@ -27,10 +27,20 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 find_library(RTLSDR_LIB rtlsdr)
 find_library(PTHREAD_LIB pthread)
 find_library(M_LIB m)
+find_library(ASOUND_LIB asound)
 
 if(NOT RTLSDR_LIB)
     message(WARNING "librtlsdr not found - RTL-SDR support will be disabled")
     set(RTLSDR_LIB "")
+endif()
+
+if(NOT ASOUND_LIB)
+    message(WARNING "libasound not found - Real-time audio playback will be disabled")
+    message(STATUS "To enable: sudo apt-get install libasound2-dev")
+    set(ASOUND_LIB "")
+else()
+    message(STATUS "ALSA support enabled for real-time audio playback")
+    add_definitions(-DHAVE_ALSA)
 endif()
 
 # Source files
@@ -41,6 +51,8 @@ set(SOURCES
     src/tea1_crypto.c
     src/tea1_crack.c
     src/audio_output.c
+    src/audio_playback.c
+    src/tetra_codec.c
     src/signal_processing.c
     src/utils.c
 )
@@ -53,6 +65,7 @@ target_link_libraries(tetra_analyzer
     ${RTLSDR_LIB}
     ${PTHREAD_LIB}
     ${M_LIB}
+    ${ASOUND_LIB}
 )
 
 # Installation

@@ -24,7 +24,13 @@
 // Buffer sizes (optimized for low memory)
 #define SDR_BUFFER_SIZE (16 * 16384)   // 256KB
 #define AUDIO_BUFFER_SIZE 8192
+#define AUDIO_RING_BUFFER_SIZE (8192 * 4)  // Ring buffer for smooth playback
 #define MAX_CHANNELS 4
+
+// TETRA audio codec constants
+#define TETRA_CODEC_FRAME_SIZE 137     // bits per codec frame
+#define TETRA_CODEC_SAMPLES 160        // samples per frame (20ms @ 8kHz)
+#define TETRA_AUDIO_SAMPLE_RATE 8000   // 8 kHz audio
 
 // Configuration structure
 typedef struct {
@@ -34,6 +40,7 @@ typedef struct {
     bool auto_gain;
     bool verbose;
     bool use_known_vulnerability;
+    bool enable_realtime_audio;
     char *output_file;
     int device_index;
 } tetra_config_t;
@@ -75,6 +82,29 @@ typedef struct {
     FILE *output_file;
 } audio_output_t;
 
+// Real-time audio playback (ALSA)
+typedef struct {
+    void *pcm_handle;
+    int16_t *ring_buffer;
+    int ring_write_pos;
+    int ring_read_pos;
+    int ring_size;
+    int sample_rate;
+    bool running;
+    pthread_t playback_thread;
+    pthread_mutex_t buffer_mutex;
+} audio_playback_t;
+
+// TETRA codec state
+typedef struct {
+    float prev_samples[TETRA_CODEC_SAMPLES];
+    float excitation[TETRA_CODEC_SAMPLES];
+    float lpc_coeffs[10];
+    float pitch_gain;
+    float pitch_period;
+    int frame_count;
+} tetra_codec_t;
+
 // Function declarations
 
 // RTL-SDR interface (rtl_interface.c)
@@ -111,6 +141,19 @@ float detect_signal_strength(const float *i, const float *q, uint32_t len);
 audio_output_t* audio_output_init(const char *filename, int sample_rate);
 int audio_output_write(audio_output_t *audio, const int16_t *samples, int count);
 void audio_output_cleanup(audio_output_t *audio);
+
+// Real-time audio playback (audio_playback.c)
+audio_playback_t* audio_playback_init(int sample_rate);
+int audio_playback_write(audio_playback_t *playback, const int16_t *samples, int count);
+void audio_playback_start(audio_playback_t *playback);
+void audio_playback_stop(audio_playback_t *playback);
+void audio_playback_cleanup(audio_playback_t *playback);
+
+// TETRA audio codec (tetra_codec.c)
+tetra_codec_t* tetra_codec_init(void);
+int tetra_codec_decode_frame(tetra_codec_t *codec, const uint8_t *encoded_bits,
+                              int16_t *audio_samples);
+void tetra_codec_cleanup(tetra_codec_t *codec);
 
 // Utilities (utils.c)
 void hex_dump(const uint8_t *data, size_t len, const char *label);
