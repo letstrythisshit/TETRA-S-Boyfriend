@@ -14,7 +14,7 @@ static const uint8_t TETRA_TRAINING_SEQ[22] = {
     1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0
 };
 
-tetra_demod_t* tetra_demod_init(uint32_t sample_rate) {
+tetra_demod_t* tetra_demod_init(uint32_t sample_rate, float squelch_threshold) {
     tetra_demod_t *demod = calloc(1, sizeof(tetra_demod_t));
     if (!demod) {
         fprintf(stderr, "Failed to allocate demodulator structure\n");
@@ -22,6 +22,7 @@ tetra_demod_t* tetra_demod_init(uint32_t sample_rate) {
     }
 
     demod->sample_count = SDR_BUFFER_SIZE / 2; // I/Q pairs
+    demod->squelch_threshold = squelch_threshold;
 
     // Allocate sample buffers (optimized for low memory)
     demod->i_samples = calloc(demod->sample_count, sizeof(float));
@@ -36,6 +37,8 @@ tetra_demod_t* tetra_demod_init(uint32_t sample_rate) {
 
     demod->bit_count = 0;
     demod->symbol_timing = 0.0f;
+
+    log_message(true, "TETRA demodulator: squelch = %.1f (adjust with -q if needed)\n", squelch_threshold);
 
     return demod;
 }
@@ -55,6 +58,16 @@ int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len) {
     for (uint32_t i = 0; i < sample_pairs; i++) {
         demod->i_samples[i] = (float)iq_data[i * 2] - 127.5f;
         demod->q_samples[i] = (float)iq_data[i * 2 + 1] - 127.5f;
+    }
+
+    // STEP 1: Check signal strength (squelch)
+    float signal_power = detect_signal_strength(demod->i_samples, demod->q_samples, sample_pairs);
+
+    // Require minimum signal strength (user-adjustable threshold)
+    // Typical TETRA signal: 20-50, noise: <10
+    if (signal_power < demod->squelch_threshold) {
+        demod->bit_count = 0;
+        return 0;  // Too weak, probably just noise
     }
 
     // Perform quadrature demodulation
@@ -105,19 +118,19 @@ bool tetra_detect_burst(tetra_demod_t *demod) {
             best_offset = offset;
         }
 
-        // Consider it a match if > 18 of 22 bits match (allows for some errors)
-        if (matches >= 18) {
-            log_message(true, "Training sequence found at offset %d (%d/22 matches)\n",
+        // STRICT: Require at least 20 out of 22 bits (91% match)
+        // This significantly reduces false positives from noise
+        if (matches >= 20) {
+            log_message(true, "✓ Valid TETRA burst at offset %d (%d/22 bits)\n",
                        offset, matches);
             return true;
         }
     }
 
-    // Weak detection for educational purposes
-    if (best_match >= 15) {
-        log_message(true, "Weak training sequence detected at offset %d (%d/22 matches)\n",
-                   best_offset, best_match);
-        return true;
+    // No valid burst found - likely noise or wrong frequency
+    // In verbose mode, show what we got
+    if (best_match >= 17) {
+        log_message(false, "Weak sync: %d/22 bits (need ≥20 for valid TETRA)\n", best_match);
     }
 
     return false;

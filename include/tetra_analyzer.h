@@ -41,6 +41,7 @@ typedef struct {
     bool verbose;
     bool use_known_vulnerability;
     bool enable_realtime_audio;
+    float squelch_threshold;  // Signal strength threshold (0-100)
     char *output_file;
     int device_index;
 } tetra_config_t;
@@ -62,6 +63,7 @@ typedef struct {
     float *q_samples;
     int sample_count;
     float symbol_timing;
+    float squelch_threshold;
     uint8_t *demod_bits;
     int bit_count;
 } tetra_demod_t;
@@ -114,7 +116,7 @@ void rtl_sdr_stop(rtl_sdr_t *sdr);
 void rtl_sdr_cleanup(rtl_sdr_t *sdr);
 
 // TETRA demodulation (tetra_demod.c)
-tetra_demod_t* tetra_demod_init(uint32_t sample_rate);
+tetra_demod_t* tetra_demod_init(uint32_t sample_rate, float squelch_threshold);
 int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len);
 bool tetra_detect_burst(tetra_demod_t *demod);
 void tetra_demod_cleanup(tetra_demod_t *demod);

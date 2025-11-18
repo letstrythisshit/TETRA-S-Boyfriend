@@ -56,13 +56,17 @@ void print_usage(const char *prog) {
     printf("  -g, --gain GAIN        Tuner gain in dB (default: auto)\n");
     printf("  -d, --device INDEX     RTL-SDR device index (default: 0)\n");
     printf("  -o, --output FILE      Output audio file (WAV format)\n");
+    printf("  -q, --squelch LEVEL    Signal strength threshold (default: 15)\n");
+    printf("                         Lower=more sensitive, Higher=less noise\n");
     printf("  -r, --realtime-audio   Enable real-time audio playback 🔊\n");
     printf("  -v, --verbose          Verbose output\n");
     printf("  -k, --use-vulnerability Use known TEA1 vulnerability\n");
     printf("  -h, --help             Show this help\n\n");
     printf("Examples:\n");
-    printf("  %s -f 420000000 -v              # Listen on 420 MHz\n", prog);
-    printf("  %s -f 420000000 -k -r -v        # Decrypt and hear audio in real-time\n", prog);
+    printf("  %s -f 420000000 -v                    # Listen on 420 MHz\n", prog);
+    printf("  %s -f 420000000 -k -r -v              # Decrypt and hear audio in real-time\n", prog);
+    printf("  %s -f 420000000 -q 20 -k -v           # Higher squelch (less noise)\n", prog);
+    printf("  %s -f 420000000 -q 10 -k -v           # Lower squelch (more sensitive)\n", prog);
     printf("  %s -f 420000000 -k -o audio.wav # Crack and save audio\n", prog);
     printf("\n");
 }
@@ -137,6 +141,7 @@ int main(int argc, char **argv) {
     g_config.verbose = false;
     g_config.use_known_vulnerability = false;
     g_config.enable_realtime_audio = false;
+    g_config.squelch_threshold = 15.0f;  // Default: filters most noise
     g_config.output_file = NULL;
 
     // Parse command line arguments
@@ -146,6 +151,7 @@ int main(int argc, char **argv) {
         {"gain", required_argument, 0, 'g'},
         {"device", required_argument, 0, 'd'},
         {"output", required_argument, 0, 'o'},
+        {"squelch", required_argument, 0, 'q'},
         {"realtime-audio", no_argument, 0, 'r'},
         {"verbose", no_argument, 0, 'v'},
         {"use-vulnerability", no_argument, 0, 'k'},
@@ -154,7 +160,7 @@ int main(int argc, char **argv) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rvkh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:q:rvkh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'f':
                 g_config.frequency = atoi(optarg);
@@ -171,6 +177,9 @@ int main(int argc, char **argv) {
                 break;
             case 'o':
                 g_config.output_file = optarg;
+                break;
+            case 'q':
+                g_config.squelch_threshold = atof(optarg);
                 break;
             case 'r':
                 g_config.enable_realtime_audio = true;
@@ -224,7 +233,7 @@ int main(int argc, char **argv) {
     }
 
     // Initialize TETRA demodulator
-    g_demod = tetra_demod_init(g_config.sample_rate);
+    g_demod = tetra_demod_init(g_config.sample_rate, g_config.squelch_threshold);
     if (!g_demod) {
         fprintf(stderr, "Failed to initialize TETRA demodulator\n");
         rtl_sdr_cleanup(g_sdr);
