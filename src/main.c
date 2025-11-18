@@ -27,6 +27,8 @@ static tea1_context_t g_tea1_ctx;
 static audio_output_t *g_audio = NULL;
 static audio_playback_t *g_playback = NULL;
 static tetra_codec_t *g_codec = NULL;
+static detection_params_t *g_params = NULL;
+static detection_status_t *g_status = NULL;
 
 void signal_handler(int signum) {
     (void)signum;
@@ -57,6 +59,7 @@ void print_usage(const char *prog) {
     printf("  -d, --device INDEX     RTL-SDR device index (default: 0)\n");
     printf("  -o, --output FILE      Output audio file (WAV format)\n");
     printf("  -r, --realtime-audio   Enable real-time audio playback 🔊\n");
+    printf("  -G, --gui              Enable GTK+ graphical interface 🖥️\n");
     printf("  -v, --verbose          Verbose output\n");
     printf("  -k, --use-vulnerability Use known TEA1 vulnerability\n");
     printf("  -h, --help             Show this help\n\n");
@@ -64,6 +67,7 @@ void print_usage(const char *prog) {
     printf("  %s -f 420000000 -v              # Listen on 420 MHz\n", prog);
     printf("  %s -f 420000000 -k -r -v        # Decrypt and hear audio in real-time\n", prog);
     printf("  %s -f 420000000 -k -o audio.wav # Crack and save audio\n", prog);
+    printf("  %s -f 420000000 -G              # Launch with graphical interface\n", prog);
     printf("\n");
 }
 
@@ -137,6 +141,7 @@ int main(int argc, char **argv) {
     g_config.verbose = false;
     g_config.use_known_vulnerability = false;
     g_config.enable_realtime_audio = false;
+    g_config.enable_gui = false;
     g_config.output_file = NULL;
 
     // Parse command line arguments
@@ -147,6 +152,7 @@ int main(int argc, char **argv) {
         {"device", required_argument, 0, 'd'},
         {"output", required_argument, 0, 'o'},
         {"realtime-audio", no_argument, 0, 'r'},
+        {"gui", no_argument, 0, 'G'},
         {"verbose", no_argument, 0, 'v'},
         {"use-vulnerability", no_argument, 0, 'k'},
         {"help", no_argument, 0, 'h'},
@@ -154,7 +160,7 @@ int main(int argc, char **argv) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rvkh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rGvkh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'f':
                 g_config.frequency = atoi(optarg);
@@ -174,6 +180,14 @@ int main(int argc, char **argv) {
                 break;
             case 'r':
                 g_config.enable_realtime_audio = true;
+                break;
+            case 'G':
+#ifdef HAVE_GTK
+                g_config.enable_gui = true;
+#else
+                fprintf(stderr, "GUI support not compiled in. Rebuild with GTK3 installed.\n");
+                return 1;
+#endif
                 break;
             case 'v':
                 g_config.verbose = true;
@@ -216,18 +230,36 @@ int main(int argc, char **argv) {
         log_message(true, "Using reduced 32-bit keyspace attack\n");
     }
 
+    // Initialize detection parameters and status
+    g_params = detection_params_init();
+    if (!g_params) {
+        fprintf(stderr, "Failed to initialize detection parameters\n");
+        return 1;
+    }
+
+    g_status = detection_status_init();
+    if (!g_status) {
+        fprintf(stderr, "Failed to initialize detection status\n");
+        detection_params_cleanup(g_params);
+        return 1;
+    }
+
     // Initialize RTL-SDR
     g_sdr = rtl_sdr_init(&g_config);
     if (!g_sdr) {
         fprintf(stderr, "Failed to initialize RTL-SDR\n");
+        detection_status_cleanup(g_status);
+        detection_params_cleanup(g_params);
         return 1;
     }
 
     // Initialize TETRA demodulator
-    g_demod = tetra_demod_init(g_config.sample_rate);
+    g_demod = tetra_demod_init(g_config.sample_rate, g_params, g_status);
     if (!g_demod) {
         fprintf(stderr, "Failed to initialize TETRA demodulator\n");
         rtl_sdr_cleanup(g_sdr);
+        detection_status_cleanup(g_status);
+        detection_params_cleanup(g_params);
         return 1;
     }
 
@@ -268,19 +300,50 @@ int main(int argc, char **argv) {
     if (g_config.enable_realtime_audio) {
         log_message(true, "🎧 Real-time audio enabled - listen to your speakers!\n");
     }
-    log_message(true, "Press Ctrl+C to stop\n\n");
+    if (!g_config.enable_gui) {
+        log_message(true, "Press Ctrl+C to stop\n\n");
+    }
 
     if (rtl_sdr_start(g_sdr, sdr_callback, NULL) < 0) {
         fprintf(stderr, "Failed to start SDR capture\n");
         tetra_demod_cleanup(g_demod);
         rtl_sdr_cleanup(g_sdr);
+        detection_status_cleanup(g_status);
+        detection_params_cleanup(g_params);
         return 1;
     }
 
-    // Main loop
-    while (g_running) {
-        usleep(100000); // 100ms
+#ifdef HAVE_GTK
+    // Launch GUI if enabled
+    if (g_config.enable_gui) {
+        log_message(true, "Launching graphical interface...\n\n");
+
+        tetra_gui_t *gui = tetra_gui_init(&g_config, g_params, g_status, g_sdr);
+        if (!gui) {
+            fprintf(stderr, "Failed to initialize GUI\n");
+            rtl_sdr_stop(g_sdr);
+            rtl_sdr_cleanup(g_sdr);
+            tetra_demod_cleanup(g_demod);
+            detection_status_cleanup(g_status);
+            detection_params_cleanup(g_params);
+            return 1;
+        }
+
+        // Run GUI main loop (blocks until window is closed)
+        tetra_gui_run(gui);
+
+        // Cleanup GUI
+        tetra_gui_cleanup(gui);
+        g_running = false;
+    } else {
+#endif
+        // Traditional CLI main loop
+        while (g_running) {
+            usleep(100000); // 100ms
+        }
+#ifdef HAVE_GTK
     }
+#endif
 
     // Cleanup
     log_message(true, "\nCleaning up...\n");
@@ -298,6 +361,14 @@ int main(int argc, char **argv) {
 
     if (g_codec) {
         tetra_codec_cleanup(g_codec);
+    }
+
+    if (g_status) {
+        detection_status_cleanup(g_status);
+    }
+
+    if (g_params) {
+        detection_params_cleanup(g_params);
     }
 
     log_message(true, "Shutdown complete.\n");
