@@ -25,6 +25,8 @@ static rtl_sdr_t *g_sdr = NULL;
 static tetra_demod_t *g_demod = NULL;
 static tea1_context_t g_tea1_ctx;
 static audio_output_t *g_audio = NULL;
+static audio_playback_t *g_playback = NULL;
+static tetra_codec_t *g_codec = NULL;
 
 void signal_handler(int signum) {
     (void)signum;
@@ -53,13 +55,15 @@ void print_usage(const char *prog) {
     printf("  -s, --sample-rate SR   Sample rate (default: 2400000)\n");
     printf("  -g, --gain GAIN        Tuner gain in dB (default: auto)\n");
     printf("  -d, --device INDEX     RTL-SDR device index (default: 0)\n");
-    printf("  -o, --output FILE      Output audio file (PCM format)\n");
+    printf("  -o, --output FILE      Output audio file (WAV format)\n");
+    printf("  -r, --realtime-audio   Enable real-time audio playback 🔊\n");
     printf("  -v, --verbose          Verbose output\n");
     printf("  -k, --use-vulnerability Use known TEA1 vulnerability\n");
     printf("  -h, --help             Show this help\n\n");
     printf("Examples:\n");
     printf("  %s -f 420000000 -v              # Listen on 420 MHz\n", prog);
-    printf("  %s -f 420000000 -k -o audio.pcm # Crack and save audio\n", prog);
+    printf("  %s -f 420000000 -k -r -v        # Decrypt and hear audio in real-time\n", prog);
+    printf("  %s -f 420000000 -k -o audio.wav # Crack and save audio\n", prog);
     printf("\n");
 }
 
@@ -75,24 +79,47 @@ void sdr_callback(uint8_t *buf, uint32_t len, void *ctx) {
             log_message(g_config.verbose, "TETRA burst detected!\n");
 
             // Attempt TEA1 decryption if we have encrypted data
-            if (g_config.use_known_vulnerability && g_demod->bit_count >= TEA1_BLOCK_SIZE * 8) {
-                uint8_t encrypted_block[TEA1_BLOCK_SIZE];
-                uint8_t decrypted_block[TEA1_BLOCK_SIZE];
+            if (g_config.use_known_vulnerability && g_demod->bit_count >= TETRA_CODEC_FRAME_SIZE) {
+                uint8_t encrypted_bits[TETRA_CODEC_FRAME_SIZE / 8 + 1];
+                uint8_t decrypted_bits[TETRA_CODEC_FRAME_SIZE / 8 + 1];
 
-                // Convert bits to bytes (simplified)
-                for (int i = 0; i < TEA1_BLOCK_SIZE; i++) {
-                    encrypted_block[i] = 0;
-                    for (int j = 0; j < 8; j++) {
-                        encrypted_block[i] |= (g_demod->demod_bits[i * 8 + j] << (7 - j));
+                // Convert demodulated bits to bytes
+                int byte_count = (TETRA_CODEC_FRAME_SIZE + 7) / 8;
+                for (int i = 0; i < byte_count; i++) {
+                    encrypted_bits[i] = 0;
+                    for (int j = 0; j < 8 && (i * 8 + j) < TETRA_CODEC_FRAME_SIZE; j++) {
+                        if (i * 8 + j < g_demod->bit_count) {
+                            encrypted_bits[i] |= (g_demod->demod_bits[i * 8 + j] << (7 - j));
+                        }
                     }
                 }
 
-                // Decrypt using TEA1
-                tea1_decrypt_block(&g_tea1_ctx, encrypted_block, decrypted_block);
+                // Decrypt the frame (simplified - treating as stream)
+                tea1_decrypt_stream(&g_tea1_ctx, encrypted_bits, decrypted_bits, byte_count);
 
-                if (g_config.verbose) {
-                    hex_dump(encrypted_block, TEA1_BLOCK_SIZE, "Encrypted");
-                    hex_dump(decrypted_block, TEA1_BLOCK_SIZE, "Decrypted");
+                if (g_config.verbose && g_demod->bit_count >= TEA1_BLOCK_SIZE * 8) {
+                    hex_dump(encrypted_bits, TEA1_BLOCK_SIZE, "Encrypted");
+                    hex_dump(decrypted_bits, TEA1_BLOCK_SIZE, "Decrypted");
+                }
+
+                // Decode TETRA audio codec if we have enough data
+                if (g_codec && g_demod->bit_count >= TETRA_CODEC_FRAME_SIZE) {
+                    int16_t audio_samples[TETRA_CODEC_SAMPLES];
+
+                    // Decode the audio frame
+                    int decoded = tetra_codec_decode_frame(g_codec, decrypted_bits, audio_samples);
+
+                    if (decoded > 0) {
+                        // Send to real-time playback if enabled
+                        if (g_playback && g_config.enable_realtime_audio) {
+                            audio_playback_write(g_playback, audio_samples, decoded);
+                        }
+
+                        // Also write to file if specified
+                        if (g_audio) {
+                            audio_output_write(g_audio, audio_samples, decoded);
+                        }
+                    }
                 }
             }
         }
@@ -109,6 +136,7 @@ int main(int argc, char **argv) {
     g_config.device_index = 0;
     g_config.verbose = false;
     g_config.use_known_vulnerability = false;
+    g_config.enable_realtime_audio = false;
     g_config.output_file = NULL;
 
     // Parse command line arguments
@@ -118,6 +146,7 @@ int main(int argc, char **argv) {
         {"gain", required_argument, 0, 'g'},
         {"device", required_argument, 0, 'd'},
         {"output", required_argument, 0, 'o'},
+        {"realtime-audio", no_argument, 0, 'r'},
         {"verbose", no_argument, 0, 'v'},
         {"use-vulnerability", no_argument, 0, 'k'},
         {"help", no_argument, 0, 'h'},
@@ -125,7 +154,7 @@ int main(int argc, char **argv) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:vkh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rvkh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'f':
                 g_config.frequency = atoi(optarg);
@@ -142,6 +171,9 @@ int main(int argc, char **argv) {
                 break;
             case 'o':
                 g_config.output_file = optarg;
+                break;
+            case 'r':
+                g_config.enable_realtime_audio = true;
                 break;
             case 'v':
                 g_config.verbose = true;
@@ -203,9 +235,29 @@ int main(int argc, char **argv) {
     uint8_t default_key[TEA1_KEY_SIZE] = {0}; // Will be cracked
     tea1_init(&g_tea1_ctx, default_key, g_config.use_known_vulnerability);
 
+    // Initialize TETRA codec (needed for real-time audio or file output)
+    if (g_config.enable_realtime_audio || g_config.output_file) {
+        g_codec = tetra_codec_init();
+        if (!g_codec) {
+            fprintf(stderr, "Warning: Failed to initialize TETRA codec\n");
+        }
+    }
+
+    // Initialize real-time audio playback if enabled
+    if (g_config.enable_realtime_audio) {
+        g_playback = audio_playback_init(TETRA_AUDIO_SAMPLE_RATE);
+        if (g_playback) {
+            audio_playback_start(g_playback);
+            log_message(true, "\n");
+        } else {
+            fprintf(stderr, "Warning: Failed to initialize real-time audio playback\n");
+            log_message(true, "Continuing without real-time audio...\n");
+        }
+    }
+
     // Initialize audio output if specified
     if (g_config.output_file) {
-        g_audio = audio_output_init(g_config.output_file, 8000);
+        g_audio = audio_output_init(g_config.output_file, TETRA_AUDIO_SAMPLE_RATE);
         if (!g_audio) {
             fprintf(stderr, "Warning: Failed to initialize audio output\n");
         }
@@ -213,6 +265,9 @@ int main(int argc, char **argv) {
 
     // Start SDR capture
     log_message(true, "Starting SDR capture...\n");
+    if (g_config.enable_realtime_audio) {
+        log_message(true, "🎧 Real-time audio enabled - listen to your speakers!\n");
+    }
     log_message(true, "Press Ctrl+C to stop\n\n");
 
     if (rtl_sdr_start(g_sdr, sdr_callback, NULL) < 0) {
@@ -233,8 +288,16 @@ int main(int argc, char **argv) {
     rtl_sdr_cleanup(g_sdr);
     tetra_demod_cleanup(g_demod);
 
+    if (g_playback) {
+        audio_playback_cleanup(g_playback);
+    }
+
     if (g_audio) {
         audio_output_cleanup(g_audio);
+    }
+
+    if (g_codec) {
+        tetra_codec_cleanup(g_codec);
     }
 
     log_message(true, "Shutdown complete.\n");

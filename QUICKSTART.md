@@ -21,6 +21,16 @@ sudo apt-get install rtl-sdr librtlsdr-dev cmake build-essential
 sudo dnf install rtl-sdr-devel cmake gcc
 ```
 
+For **real-time audio playback** (hear decrypted audio through speakers):
+
+```bash
+# Ubuntu/Debian/Raspberry Pi
+sudo apt-get install libasound2-dev
+
+# Fedora/RHEL
+sudo dnf install alsa-lib-devel
+```
+
 **Note**: The software works in simulation mode without RTL-SDR hardware.
 
 ### 2. Build
@@ -81,13 +91,30 @@ If you have RTL-SDR hardware connected:
 # With vulnerability exploitation enabled
 ./build/tetra_analyzer -f 420000000 -k -v
 
+# 🔊 REAL-TIME AUDIO - Hear decrypted transmissions!
+./build/tetra_analyzer -f 420000000 -k -r -v
+
 # Save audio to file
 ./build/tetra_analyzer -f 420000000 -k -o output.wav -v
+
+# Real-time audio AND save to file
+./build/tetra_analyzer -f 420000000 -k -r -o output.wav -v
 ```
 
 ## Common Use Cases
 
-### 1. Educational Demonstration
+### 1. Real-time Laboratory Monitoring 🔊
+
+**Most useful for laboratory testing** - hear what your TETRA transmitter is sending in real-time:
+
+```bash
+# Decrypt and play audio through speakers
+./build/tetra_analyzer -f 420000000 -k -r -v
+```
+
+You'll hear the decrypted audio immediately as it's transmitted!
+
+### 2. Educational Demonstration
 
 Show students/colleagues how the vulnerability works:
 
@@ -96,13 +123,13 @@ Show students/colleagues how the vulnerability works:
 ./build/tetra_analyzer -f 420000000 -k -v
 ```
 
-### 2. Laboratory Testing
+### 3. Laboratory Testing with Recording
 
-Test with your own TETRA transmitter in a Faraday cage:
+Test with your own TETRA transmitter in a Faraday cage and save the session:
 
 ```bash
-# Scan specific frequency with manual gain
-./build/tetra_analyzer -f 425000000 -g 30 -k -v
+# Scan specific frequency, listen live, and record
+./build/tetra_analyzer -f 425000000 -g 30 -k -r -o session.wav -v
 ```
 
 ### 3. Security Research

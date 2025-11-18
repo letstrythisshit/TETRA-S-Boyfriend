@@ -28,7 +28,9 @@ This toolkit demonstrates the TEA1 encryption vulnerabilities in TETRA (Terrestr
 - **Signal Demodulation**: TETRA π/4-DQPSK demodulation and burst detection
 - **TEA1 Decryption**: Implementation of TEA1 cipher with known vulnerabilities
 - **Key Recovery**: Demonstrates 32-bit keyspace reduction vulnerability
-- **Audio Output**: Extract and save decrypted audio streams
+- **🔊 Real-time Audio Playback**: Hear decrypted laboratory transmissions in real-time
+- **TETRA Codec**: ACELP-based audio decoder for TETRA voice frames
+- **Audio File Output**: Save decrypted audio streams to WAV files
 - **ARM Optimized**: Designed for low-resource ARM devices (Raspberry Pi, etc.)
 - **Educational**: Well-commented code explaining each vulnerability
 
@@ -54,14 +56,25 @@ This reduces cracking time from centuries to **minutes or hours** on modern hard
 #### Software
 - GCC or Clang compiler
 - CMake 3.10 or higher
-- librtlsdr (optional, for real hardware)
+- librtlsdr (optional, for real RTL-SDR hardware)
+- libasound2-dev (optional, for real-time audio playback)
 - pthread library
 - Standard C math library
+
+**To enable real-time audio:**
+```bash
+# Ubuntu/Debian/Raspberry Pi
+sudo apt-get install libasound2-dev
+
+# Fedora/RHEL
+sudo dnf install alsa-lib-devel
+```
 
 #### Hardware (Optional)
 - RTL-SDR dongle (RTL2832U-based USB receiver)
 - Antenna suitable for TETRA frequencies (380-470 MHz)
 - Laboratory TETRA transmitter for testing
+- Speakers or headphones for real-time audio monitoring
 
 ### Compilation
 
@@ -108,16 +121,32 @@ Listen for TETRA signals on 420 MHz:
 ./tetra_analyzer -f 420000000 -v
 ```
 
+### Real-time Audio Playback 🔊
+
+**Hear decrypted audio in real-time** from your laboratory TETRA transmitter:
+
+```bash
+# Decrypt and hear audio live through your speakers
+./tetra_analyzer -f 420000000 -k -r -v
+```
+
+This is the **main feature** for laboratory testing - you can immediately hear what the encrypted transmission contains after the TEA1 vulnerability is exploited!
+
 ### Advanced Usage
 
-Enable vulnerability exploitation and save audio:
+Save audio to file:
 ```bash
 ./tetra_analyzer -f 420000000 -k -o audio.wav -v
 ```
 
+Real-time playback AND save to file simultaneously:
+```bash
+./tetra_analyzer -f 420000000 -k -r -o audio.wav -v
+```
+
 Run with specific gain settings:
 ```bash
-./tetra_analyzer -f 420000000 -g 30 -v
+./tetra_analyzer -f 420000000 -g 30 -r -k -v
 ```
 
 ### Command Line Options
@@ -129,6 +158,7 @@ Options:
   -g, --gain GAIN        Tuner gain in dB (default: auto)
   -d, --device INDEX     RTL-SDR device index (default: 0)
   -o, --output FILE      Output audio file (WAV format)
+  -r, --realtime-audio   Enable real-time audio playback 🔊
   -v, --verbose          Verbose output
   -k, --use-vulnerability Use known TEA1 vulnerability
   -h, --help             Show help message
