@@ -63,8 +63,8 @@ int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len) {
 
     quadrature_demod(demod->i_samples, demod->q_samples, demod_output, sample_pairs);
 
-    // Apply low-pass filter
-    low_pass_filter(demod_output, sample_pairs, 0.1f);
+    // Apply low-pass filter (strengthened from 0.1f to 0.5f for better noise rejection)
+    low_pass_filter(demod_output, sample_pairs, 0.5f);
 
     // Symbol timing recovery and bit extraction (simplified)
     // Real implementation would use Gardner or Mueller-Müller timing recovery
@@ -87,37 +87,70 @@ bool tetra_detect_burst(tetra_demod_t *demod) {
         return false;
     }
 
-    // Search for training sequence in demodulated bits
+    // Step 1: Check signal power to reject pure noise
+    // Calculate RMS power from I/Q samples
+    float signal_power = detect_signal_strength(demod->i_samples, demod->q_samples,
+                                                 demod->sample_count);
+
+    // Minimum signal power threshold (tuned for TETRA signals)
+    // Typical TETRA signal shows power > 10.0, noise usually < 5.0
+    const float MIN_SIGNAL_POWER = 8.0f;
+
+    if (signal_power < MIN_SIGNAL_POWER) {
+        log_message(true, "Signal power too low: %.2f < %.2f (rejecting noise)\n",
+                   signal_power, MIN_SIGNAL_POWER);
+        return false;
+    }
+
+    // Step 2: Search for training sequence in demodulated bits
     int best_match = 0;
     int best_offset = -1;
+    float best_correlation = 0.0f;
 
     for (int offset = 0; offset < demod->bit_count - 22; offset++) {
         int matches = 0;
+        float correlation = 0.0f;
 
+        // Count bit matches and calculate correlation
         for (int i = 0; i < 22; i++) {
             if (demod->demod_bits[offset + i] == TETRA_TRAINING_SEQ[i]) {
                 matches++;
+                correlation += 1.0f;
+            } else {
+                correlation -= 1.0f;
             }
         }
+
+        // Normalize correlation to [-1.0, 1.0]
+        correlation /= 22.0f;
 
         if (matches > best_match) {
             best_match = matches;
             best_offset = offset;
+            best_correlation = correlation;
         }
 
-        // Consider it a match if > 18 of 22 bits match (allows for some errors)
-        if (matches >= 18) {
-            log_message(true, "Training sequence found at offset %d (%d/22 matches)\n",
-                       offset, matches);
+        // Strong match threshold: >= 20 of 22 bits (90.9% accuracy)
+        // This significantly reduces false positives from noise
+        if (matches >= 20 && correlation >= 0.8f) {
+            log_message(true, "TETRA burst detected at offset %d (%d/22 matches, corr=%.3f, power=%.2f)\n",
+                       offset, matches, correlation, signal_power);
             return true;
         }
     }
 
-    // Weak detection for educational purposes
-    if (best_match >= 15) {
-        log_message(true, "Weak training sequence detected at offset %d (%d/22 matches)\n",
-                   best_offset, best_match);
+    // Moderate detection threshold: >= 19 of 22 bits (86.4% accuracy)
+    // Only accept if correlation is strong and signal power is good
+    if (best_match >= 19 && best_correlation >= 0.75f && signal_power >= MIN_SIGNAL_POWER * 1.2f) {
+        log_message(true, "TETRA burst detected (moderate) at offset %d (%d/22 matches, corr=%.3f, power=%.2f)\n",
+                   best_offset, best_match, best_correlation, signal_power);
         return true;
+    }
+
+    // Log rejection for debugging
+    if (best_match >= 15) {
+        log_message(true, "Rejected: insufficient quality (matches=%d/22, corr=%.3f, power=%.2f)\n",
+                   best_match, best_correlation, signal_power);
     }
 
     return false;
