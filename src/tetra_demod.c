@@ -24,6 +24,7 @@ tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params
     }
 
     demod->sample_count = SDR_BUFFER_SIZE / 2; // I/Q pairs
+    demod->squelch_threshold = squelch_threshold;
 
     // Allocate sample buffers (optimized for low memory)
     demod->i_samples = calloc(demod->sample_count, sizeof(float));
@@ -40,6 +41,8 @@ tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params
     demod->symbol_timing = 0.0f;
     demod->params = params;
     demod->status = status;
+
+    log_message(true, "TETRA demodulator: squelch = %.1f (adjust with -q if needed)\n", squelch_threshold);
 
     return demod;
 }
@@ -59,6 +62,16 @@ int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len) {
     for (uint32_t i = 0; i < sample_pairs; i++) {
         demod->i_samples[i] = (float)iq_data[i * 2] - 127.5f;
         demod->q_samples[i] = (float)iq_data[i * 2 + 1] - 127.5f;
+    }
+
+    // STEP 1: Check signal strength (squelch)
+    float signal_power = detect_signal_strength(demod->i_samples, demod->q_samples, sample_pairs);
+
+    // Require minimum signal strength (user-adjustable threshold)
+    // Typical TETRA signal: 20-50, noise: <10
+    if (signal_power < demod->squelch_threshold) {
+        demod->bit_count = 0;
+        return 0;  // Too weak, probably just noise
     }
 
     // Perform quadrature demodulation
