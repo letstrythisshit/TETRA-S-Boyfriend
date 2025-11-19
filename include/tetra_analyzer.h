@@ -115,6 +115,7 @@ typedef struct {
     uint32_t sample_rate;
     int gain;
     bool auto_gain;
+    float squelch_threshold;           // Signal strength threshold for squelch (default: 15.0)
     bool verbose;
     bool use_known_vulnerability;
     bool enable_realtime_audio;

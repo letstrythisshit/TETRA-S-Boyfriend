@@ -59,6 +59,8 @@ void print_usage(const char *prog) {
     printf("  -g, --gain GAIN        Tuner gain in dB (default: auto)\n");
     printf("  -d, --device INDEX     RTL-SDR device index (default: 0)\n");
     printf("  -o, --output FILE      Output audio file (WAV format)\n");
+    printf("  -q, --squelch LEVEL    Signal strength threshold (default: 15.0)\n");
+    printf("                         Lower=more sensitive, Higher=less noise\n");
     printf("  -r, --realtime-audio   Enable real-time audio playback 🔊\n");
     printf("  -G, --gui              Enable GTK+ graphical interface 🖥️\n");
     printf("  -T, --trunking         Enable trunked radio mode 📻\n");
@@ -70,6 +72,8 @@ void print_usage(const char *prog) {
     printf("Examples:\n");
     printf("  %s -f 420000000 -v              # Listen on 420 MHz\n", prog);
     printf("  %s -f 420000000 -k -r -v        # Decrypt and hear audio in real-time\n", prog);
+    printf("  %s -f 420000000 -q 20 -k -v     # Higher squelch (less noise)\n", prog);
+    printf("  %s -f 420000000 -q 10 -k -v     # Lower squelch (more sensitive)\n", prog);
     printf("  %s -f 420000000 -k -o audio.wav # Crack and save audio\n", prog);
     printf("  %s -f 420000000 -G              # Launch with graphical interface\n", prog);
     printf("  %s -T -c 420000000 -t 1 -t 2 -r # Trunked mode: follow TG 1 & 2\n", prog);
@@ -167,6 +171,7 @@ int main(int argc, char **argv) {
     g_config.sample_rate = TETRA_SAMPLE_RATE;
     g_config.gain = 0;
     g_config.auto_gain = true;
+    g_config.squelch_threshold = 15.0f;  // Default squelch level
     g_config.device_index = 0;
     g_config.verbose = false;
     g_config.use_known_vulnerability = false;
@@ -195,6 +200,7 @@ int main(int argc, char **argv) {
         {"gain", required_argument, 0, 'g'},
         {"device", required_argument, 0, 'd'},
         {"output", required_argument, 0, 'o'},
+        {"squelch", required_argument, 0, 'q'},
         {"realtime-audio", no_argument, 0, 'r'},
         {"gui", no_argument, 0, 'G'},
         {"trunking", no_argument, 0, 'T'},
@@ -207,7 +213,7 @@ int main(int argc, char **argv) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rGTc:t:vkh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:q:rGTc:t:vkh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'f':
                 g_config.frequency = atoi(optarg);
@@ -224,6 +230,9 @@ int main(int argc, char **argv) {
                 break;
             case 'o':
                 g_config.output_file = optarg;
+                break;
+            case 'q':
+                g_config.squelch_threshold = atof(optarg);
                 break;
             case 'r':
                 g_config.enable_realtime_audio = true;
@@ -297,6 +306,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to initialize detection parameters\n");
         return 1;
     }
+
+    // Apply squelch threshold to detection parameters
+    pthread_mutex_lock(&g_params->lock);
+    g_params->min_signal_power = g_config.squelch_threshold;
+    pthread_mutex_unlock(&g_params->lock);
 
     g_status = detection_status_init();
     if (!g_status) {
