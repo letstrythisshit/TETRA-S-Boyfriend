@@ -229,10 +229,10 @@ int main(int argc, char **argv) {
                 g_config.enable_realtime_audio = true;
                 break;
             case 'G':
-#ifdef HAVE_GTK
+#ifdef HAVE_IMGUI
                 g_config.enable_gui = true;
 #else
-                fprintf(stderr, "GUI support not compiled in. Rebuild with GTK3 installed.\n");
+                fprintf(stderr, "GUI support not compiled in. Run ./setup_imgui.sh and rebuild.\n");
                 return 1;
 #endif
                 break;
@@ -401,10 +401,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-#ifdef HAVE_GTK
+#ifdef HAVE_IMGUI
     // Launch GUI if enabled
     if (g_config.enable_gui) {
-        log_message(true, "Launching graphical interface...\n\n");
+        log_message(true, "Launching Dear ImGui interface...\n\n");
 
         tetra_gui_t *gui = tetra_gui_init(&g_config, g_params, g_status, g_sdr);
         if (!gui) {
@@ -429,7 +429,7 @@ int main(int argc, char **argv) {
         while (g_running) {
             usleep(100000); // 100ms
         }
-#ifdef HAVE_GTK
+#ifdef HAVE_IMGUI
     }
 #endif
 

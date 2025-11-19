@@ -57,3 +57,6 @@ __pycache__/
 *.tar.gz
 *.zip
 *.7z
+
+# External dependencies (downloaded by setup scripts)
+external/
