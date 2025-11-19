@@ -14,7 +14,7 @@ static const uint8_t TETRA_TRAINING_SEQ[22] = {
     1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0
 };
 
-tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params, detection_status_t *status) {
+tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params, detection_status_t *status, float squelch_threshold) {
     (void)sample_rate; // Reserved for future use
 
     tetra_demod_t *demod = calloc(1, sizeof(tetra_demod_t));

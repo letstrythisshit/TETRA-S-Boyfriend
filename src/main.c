@@ -329,7 +329,7 @@ int main(int argc, char **argv) {
     }
 
     // Initialize TETRA demodulator
-    g_demod = tetra_demod_init(g_config.sample_rate, g_params, g_status);
+    g_demod = tetra_demod_init(g_config.sample_rate, g_params, g_status, g_config.squelch_threshold);
     if (!g_demod) {
         fprintf(stderr, "Failed to initialize TETRA demodulator\n");
         rtl_sdr_cleanup(g_sdr);

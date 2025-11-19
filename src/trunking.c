@@ -81,7 +81,8 @@ channel_manager_t* channel_manager_init(trunking_config_t *config, rtl_sdr_t *sd
 
     // Initialize control channel demodulator
     if (config->control_channel_freq > 0) {
-        mgr->control_demod = tetra_demod_init(TETRA_SAMPLE_RATE, params, status);
+        float squelch = params ? params->min_signal_power : 15.0f;
+        mgr->control_demod = tetra_demod_init(TETRA_SAMPLE_RATE, params, status, squelch);
         if (!mgr->control_demod) {
             fprintf(stderr, "Failed to initialize control channel demodulator\n");
             channel_manager_cleanup(mgr);

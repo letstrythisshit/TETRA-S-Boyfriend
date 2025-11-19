@@ -263,7 +263,7 @@ void rtl_sdr_stop(rtl_sdr_t *sdr);
 void rtl_sdr_cleanup(rtl_sdr_t *sdr);
 
 // TETRA demodulation (tetra_demod.c)
-tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params, detection_status_t *status);
+tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params, detection_status_t *status, float squelch_threshold);
 int tetra_demod_process(tetra_demod_t *demod, uint8_t *iq_data, uint32_t len);
 bool tetra_detect_burst(tetra_demod_t *demod);
 void tetra_demod_cleanup(tetra_demod_t *demod);
