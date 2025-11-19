@@ -31,6 +31,9 @@ static detection_params_t *g_params = NULL;
 static detection_status_t *g_status = NULL;
 static channel_manager_t *g_channel_mgr = NULL;
 
+// Forward declaration
+void sdr_callback(uint8_t *buf, uint32_t len, void *ctx);
+
 void signal_handler(int signum) {
     (void)signum;
     log_message(true, "\nShutting down gracefully...\n");
@@ -62,7 +65,7 @@ void print_usage(const char *prog) {
     printf("  -q, --squelch LEVEL    Signal strength threshold (default: 15)\n");
     printf("                         Lower=more sensitive, Higher=less noise\n");
     printf("  -r, --realtime-audio   Enable real-time audio playback 🔊\n");
-    printf("  -G, --gui              Enable GTK+ graphical interface 🖥️\n");
+    printf("  -G, --gui              Enable Dear ImGui graphical interface 🖥️\n");
     printf("  -T, --trunking         Enable trunked radio mode 📻\n");
     printf("  -c, --control-freq     Control channel frequency (for trunking)\n");
     printf("  -t, --talk-group ID    Add monitored talk group (can use multiple times)\n");
@@ -84,6 +87,13 @@ void print_usage(const char *prog) {
     printf("  how police/fire radios work. Use -T to enable, -c for control channel,\n");
     printf("  and -t to specify talk groups to monitor.\n");
     printf("\n");
+}
+
+// SDR thread wrapper for GUI mode
+void* rtl_sdr_start_wrapper(void *arg) {
+    (void)arg;
+    rtl_sdr_start(g_sdr, sdr_callback, NULL);
+    return NULL;
 }
 
 void sdr_callback(uint8_t *buf, uint32_t len, void *ctx) {
@@ -397,6 +407,24 @@ int main(int argc, char **argv) {
         channel_manager_start(g_channel_mgr);
     }
 
+#ifdef HAVE_IMGUI
+    // Launch GUI if enabled (must be done BEFORE starting SDR to avoid blocking)
+    tetra_gui_t *gui = NULL;
+    if (g_config.enable_gui) {
+        log_message(true, "Launching Dear ImGui interface...\n\n");
+
+        gui = tetra_gui_init(&g_config, g_params, g_status, g_sdr);
+        if (!gui) {
+            fprintf(stderr, "Failed to initialize GUI\n");
+            rtl_sdr_cleanup(g_sdr);
+            tetra_demod_cleanup(g_demod);
+            detection_status_cleanup(g_status);
+            detection_params_cleanup(g_params);
+            return 1;
+        }
+    }
+#endif
+
     // Start SDR capture
     log_message(true, "Starting SDR capture...\n");
     if (g_config.enable_realtime_audio) {
@@ -406,26 +434,18 @@ int main(int argc, char **argv) {
         log_message(true, "Press Ctrl+C to stop\n\n");
     }
 
-    if (rtl_sdr_start(g_sdr, sdr_callback, NULL) < 0) {
-        fprintf(stderr, "Failed to start SDR capture\n");
-        tetra_demod_cleanup(g_demod);
-        rtl_sdr_cleanup(g_sdr);
-        detection_status_cleanup(g_status);
-        detection_params_cleanup(g_params);
-        return 1;
-    }
-
+    // Start SDR in non-blocking mode if GUI is enabled, otherwise blocking
 #ifdef HAVE_IMGUI
-    // Launch GUI if enabled
     if (g_config.enable_gui) {
-        log_message(true, "Launching Dear ImGui interface...\n\n");
-
-        tetra_gui_t *gui = tetra_gui_init(&g_config, g_params, g_status, g_sdr);
-        if (!gui) {
-            fprintf(stderr, "Failed to initialize GUI\n");
-            rtl_sdr_stop(g_sdr);
-            rtl_sdr_cleanup(g_sdr);
+        // Start SDR capture in background thread for GUI mode
+        pthread_t sdr_thread;
+        if (pthread_create(&sdr_thread, NULL, (void*(*)(void*))rtl_sdr_start_wrapper, NULL) != 0) {
+            fprintf(stderr, "Failed to start SDR thread\n");
+#ifdef HAVE_IMGUI
+            if (gui) tetra_gui_cleanup(gui);
+#endif
             tetra_demod_cleanup(g_demod);
+            rtl_sdr_cleanup(g_sdr);
             detection_status_cleanup(g_status);
             detection_params_cleanup(g_params);
             return 1;
@@ -434,14 +454,23 @@ int main(int argc, char **argv) {
         // Run GUI main loop (blocks until window is closed)
         tetra_gui_run(gui);
 
+        // Signal SDR to stop
+        g_running = false;
+        rtl_sdr_stop(g_sdr);
+        pthread_join(sdr_thread, NULL);
+
         // Cleanup GUI
         tetra_gui_cleanup(gui);
-        g_running = false;
     } else {
 #endif
-        // Traditional CLI main loop
-        while (g_running) {
-            usleep(100000); // 100ms
+        // Traditional CLI mode - SDR runs in main thread
+        if (rtl_sdr_start(g_sdr, sdr_callback, NULL) < 0) {
+            fprintf(stderr, "Failed to start SDR capture\n");
+            tetra_demod_cleanup(g_demod);
+            rtl_sdr_cleanup(g_sdr);
+            detection_status_cleanup(g_status);
+            detection_params_cleanup(g_params);
+            return 1;
         }
 #ifdef HAVE_IMGUI
     }
