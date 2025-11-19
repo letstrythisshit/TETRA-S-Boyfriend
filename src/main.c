@@ -29,6 +29,7 @@ static audio_playback_t *g_playback = NULL;
 static tetra_codec_t *g_codec = NULL;
 static detection_params_t *g_params = NULL;
 static detection_status_t *g_status = NULL;
+static channel_manager_t *g_channel_mgr = NULL;
 
 void signal_handler(int signum) {
     (void)signum;
@@ -60,6 +61,9 @@ void print_usage(const char *prog) {
     printf("  -o, --output FILE      Output audio file (WAV format)\n");
     printf("  -r, --realtime-audio   Enable real-time audio playback 🔊\n");
     printf("  -G, --gui              Enable GTK+ graphical interface 🖥️\n");
+    printf("  -T, --trunking         Enable trunked radio mode 📻\n");
+    printf("  -c, --control-freq     Control channel frequency (for trunking)\n");
+    printf("  -t, --talk-group ID    Add monitored talk group (can use multiple times)\n");
     printf("  -v, --verbose          Verbose output\n");
     printf("  -k, --use-vulnerability Use known TEA1 vulnerability\n");
     printf("  -h, --help             Show this help\n\n");
@@ -68,6 +72,13 @@ void print_usage(const char *prog) {
     printf("  %s -f 420000000 -k -r -v        # Decrypt and hear audio in real-time\n", prog);
     printf("  %s -f 420000000 -k -o audio.wav # Crack and save audio\n", prog);
     printf("  %s -f 420000000 -G              # Launch with graphical interface\n", prog);
+    printf("  %s -T -c 420000000 -t 1 -t 2 -r # Trunked mode: follow TG 1 & 2\n", prog);
+    printf("\n");
+    printf("Trunked Radio Mode:\n");
+    printf("  In trunked mode, the analyzer monitors a control channel and automatically\n");
+    printf("  follows voice channel assignments for specified talk groups, similar to\n");
+    printf("  how police/fire radios work. Use -T to enable, -c for control channel,\n");
+    printf("  and -t to specify talk groups to monitor.\n");
     printf("\n");
 }
 
@@ -76,11 +87,30 @@ void sdr_callback(uint8_t *buf, uint32_t len, void *ctx) {
 
     if (!g_running) return;
 
+    // In trunking mode, use channel manager's demodulator
+    tetra_demod_t *active_demod = g_demod;
+    if (g_config.enable_trunking && g_channel_mgr) {
+        // If on control channel, use control demodulator
+        if (g_channel_mgr->current_frequency == g_config.trunking.control_channel_freq) {
+            active_demod = g_channel_mgr->control_demod;
+        }
+    }
+
     // Process samples through TETRA demodulator
-    if (tetra_demod_process(g_demod, buf, len) > 0) {
+    if (tetra_demod_process(active_demod, buf, len) > 0) {
         // Check if we detected a TETRA burst
-        if (tetra_detect_burst(g_demod)) {
+        if (tetra_detect_burst(active_demod)) {
             log_message(g_config.verbose, "TETRA burst detected!\n");
+
+            // In trunking mode, try to decode control channel messages
+            if (g_config.enable_trunking && g_channel_mgr &&
+                active_demod == g_channel_mgr->control_demod) {
+                ctrl_message_t ctrl_msg;
+                if (decode_control_channel_data(active_demod->demod_bits,
+                                               active_demod->bit_count, &ctrl_msg)) {
+                    channel_manager_process_control_message(g_channel_mgr, &ctrl_msg);
+                }
+            }
 
             // Attempt TEA1 decryption if we have encrypted data
             if (g_config.use_known_vulnerability && g_demod->bit_count >= TETRA_CODEC_FRAME_SIZE) {
@@ -142,7 +172,21 @@ int main(int argc, char **argv) {
     g_config.use_known_vulnerability = false;
     g_config.enable_realtime_audio = false;
     g_config.enable_gui = false;
+    g_config.enable_trunking = false;
     g_config.output_file = NULL;
+
+    // Initialize trunking configuration
+    g_config.trunking.enabled = false;
+    g_config.trunking.control_channel_freq = 0;
+    g_config.trunking.auto_follow = true;
+    g_config.trunking.record_all = false;
+    g_config.trunking.priority_threshold = 0;
+    g_config.trunking.hold_time_ms = 2000;  // 2 seconds
+    g_config.trunking.emergency_override = true;
+
+    // Track talk groups to monitor
+    uint32_t monitored_talk_groups[32];
+    int monitored_tg_count = 0;
 
     // Parse command line arguments
     static struct option long_options[] = {
@@ -153,6 +197,9 @@ int main(int argc, char **argv) {
         {"output", required_argument, 0, 'o'},
         {"realtime-audio", no_argument, 0, 'r'},
         {"gui", no_argument, 0, 'G'},
+        {"trunking", no_argument, 0, 'T'},
+        {"control-freq", required_argument, 0, 'c'},
+        {"talk-group", required_argument, 0, 't'},
         {"verbose", no_argument, 0, 'v'},
         {"use-vulnerability", no_argument, 0, 'k'},
         {"help", no_argument, 0, 'h'},
@@ -160,7 +207,7 @@ int main(int argc, char **argv) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rGvkh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rGTc:t:vkh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'f':
                 g_config.frequency = atoi(optarg);
@@ -188,6 +235,20 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "GUI support not compiled in. Rebuild with GTK3 installed.\n");
                 return 1;
 #endif
+                break;
+            case 'T':
+                g_config.enable_trunking = true;
+                g_config.trunking.enabled = true;
+                break;
+            case 'c':
+                g_config.trunking.control_channel_freq = atoi(optarg);
+                break;
+            case 't':
+                if (monitored_tg_count < 32) {
+                    monitored_talk_groups[monitored_tg_count++] = atoi(optarg);
+                } else {
+                    fprintf(stderr, "Warning: Maximum 32 talk groups supported\n");
+                }
                 break;
             case 'v':
                 g_config.verbose = true;
@@ -295,6 +356,33 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Initialize trunked radio system if enabled
+    if (g_config.enable_trunking) {
+        log_message(true, "\n📻 Initializing trunked radio system...\n");
+
+        if (g_config.trunking.control_channel_freq == 0) {
+            fprintf(stderr, "Error: Trunking mode requires control channel frequency (-c option)\n");
+            return 1;
+        }
+
+        g_channel_mgr = channel_manager_init(&g_config.trunking, g_sdr, g_params, g_status);
+        if (!g_channel_mgr) {
+            fprintf(stderr, "Failed to initialize channel manager\n");
+            return 1;
+        }
+
+        // Add monitored talk groups
+        for (int i = 0; i < monitored_tg_count; i++) {
+            char tg_name[64];
+            snprintf(tg_name, sizeof(tg_name), "TalkGroup-%u", monitored_talk_groups[i]);
+            channel_manager_add_talk_group(g_channel_mgr, monitored_talk_groups[i],
+                                          tg_name, true, 5);
+        }
+
+        // Start channel manager
+        channel_manager_start(g_channel_mgr);
+    }
+
     // Start SDR capture
     log_message(true, "Starting SDR capture...\n");
     if (g_config.enable_realtime_audio) {
@@ -347,6 +435,15 @@ int main(int argc, char **argv) {
 
     // Cleanup
     log_message(true, "\nCleaning up...\n");
+
+    // Stop channel manager if running
+    if (g_channel_mgr) {
+        if (g_config.enable_trunking) {
+            channel_manager_print_statistics(g_channel_mgr);
+        }
+        channel_manager_cleanup(g_channel_mgr);
+    }
+
     rtl_sdr_stop(g_sdr);
     rtl_sdr_cleanup(g_sdr);
     tetra_demod_cleanup(g_demod);

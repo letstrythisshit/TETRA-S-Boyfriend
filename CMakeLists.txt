@@ -72,6 +72,8 @@ set(SOURCES
     src/tetra_codec.c
     src/signal_processing.c
     src/utils.c
+    src/trunking.c
+    src/control_channel.c
 )
 
 # Add GUI source if GTK3 is available
