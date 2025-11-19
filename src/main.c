@@ -171,6 +171,7 @@ int main(int argc, char **argv) {
     g_config.sample_rate = TETRA_SAMPLE_RATE;
     g_config.gain = 0;
     g_config.auto_gain = true;
+    g_config.squelch_threshold = 15.0f;  // Default squelch level
     g_config.device_index = 0;
     g_config.verbose = false;
     g_config.use_known_vulnerability = false;
@@ -212,7 +213,7 @@ int main(int argc, char **argv) {
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:rGTc:t:vkh", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "f:s:g:d:o:q:rGTc:t:vkh", long_options, NULL)) != -1) {
         switch (opt) {
             case 'f':
                 g_config.frequency = atoi(optarg);
@@ -305,6 +306,11 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to initialize detection parameters\n");
         return 1;
     }
+
+    // Apply squelch threshold to detection parameters
+    pthread_mutex_lock(&g_params->lock);
+    g_params->min_signal_power = g_config.squelch_threshold;
+    pthread_mutex_unlock(&g_params->lock);
 
     g_status = detection_status_init();
     if (!g_status) {
