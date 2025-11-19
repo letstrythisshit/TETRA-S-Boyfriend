@@ -15,6 +15,8 @@ static const uint8_t TETRA_TRAINING_SEQ[22] = {
 };
 
 tetra_demod_t* tetra_demod_init(uint32_t sample_rate, detection_params_t *params, detection_status_t *status) {
+    (void)sample_rate; // Reserved for future use
+
     tetra_demod_t *demod = calloc(1, sizeof(tetra_demod_t));
     if (!demod) {
         fprintf(stderr, "Failed to allocate demodulator structure\n");
