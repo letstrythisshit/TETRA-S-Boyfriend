@@ -17,9 +17,8 @@
 
 // Playback thread function
 static void* playback_thread_func(void *arg) {
-    audio_playback_t *playback = (audio_playback_t *)arg;
-
 #ifdef HAVE_ALSA
+    audio_playback_t *playback = (audio_playback_t *)arg;
     snd_pcm_t *pcm = (snd_pcm_t *)playback->pcm_handle;
     int16_t temp_buffer[512];  // Small chunks for low latency
 
@@ -59,6 +58,8 @@ static void* playback_thread_func(void *arg) {
     }
 
     log_message(true, "Real-time audio playback thread stopped\n");
+#else
+    (void)arg; // Suppress unused parameter warning when ALSA not available
 #endif
 
     return NULL;

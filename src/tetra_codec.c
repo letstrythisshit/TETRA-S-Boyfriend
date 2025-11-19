@@ -48,6 +48,8 @@ static void decode_lpc_coeffs(uint32_t lpc_params, float *coeffs) {
 // Generate excitation signal from codebook
 static void generate_excitation(tetra_codec_t *codec, uint32_t codebook_idx,
                                 float gain, float *excitation) {
+    (void)codec; // Reserved for future adaptive codebook implementation
+
     // Simplified ACELP codebook
     // Real TETRA uses algebraic codebook + adaptive codebook
 

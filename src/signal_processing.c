@@ -79,6 +79,8 @@ void downsample(const float *input, float *output, uint32_t input_len, uint32_t 
 }
 
 void apply_window(float *data, uint32_t len, int window_type) {
+    (void)window_type; // Currently only Hamming window implemented
+
     // Apply windowing function (Hamming window)
     for (uint32_t i = 0; i < len; i++) {
         float w = 0.54f - 0.46f * cosf(2.0f * M_PI * i / (len - 1));
