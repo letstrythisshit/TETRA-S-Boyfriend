@@ -59,6 +59,65 @@ static void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
+// Setup professional Photoshop-like dark theme (based on Dithers-boyfriend)
+static void setupImGuiStyle() {
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImVec4* colors = style.Colors;
+
+    // Dark Photoshop-like theme
+    colors[ImGuiCol_Text] = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_WindowBg] = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
+    colors[ImGuiCol_ChildBg] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_PopupBg] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+    colors[ImGuiCol_Border] = ImVec4(0.30f, 0.30f, 0.30f, 0.50f);
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.45f, 0.45f, 0.45f, 1.00f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.45f, 0.45f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.55f, 0.55f, 0.55f, 1.00f);
+    colors[ImGuiCol_CheckMark] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.40f, 0.70f, 1.00f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.50f, 0.80f, 1.00f, 1.00f);
+    colors[ImGuiCol_Button] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_Header] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_Separator] = ImVec4(0.30f, 0.30f, 0.30f, 0.50f);
+    colors[ImGuiCol_SeparatorHovered] = ImVec4(0.40f, 0.40f, 0.40f, 0.70f);
+    colors[ImGuiCol_SeparatorActive] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_ResizeGrip] = ImVec4(0.30f, 0.30f, 0.30f, 0.25f);
+    colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.40f, 0.40f, 0.40f, 0.67f);
+    colors[ImGuiCol_ResizeGripActive] = ImVec4(0.50f, 0.50f, 0.50f, 0.95f);
+    colors[ImGuiCol_Tab] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+    colors[ImGuiCol_TabHovered] = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
+    colors[ImGuiCol_TabActive] = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+    colors[ImGuiCol_TabUnfocused] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+
+    // Professional styling
+    style.WindowRounding = 0.0f;        // Sharp window edges like Photoshop
+    style.FrameRounding = 2.0f;         // Subtle rounded controls
+    style.ScrollbarRounding = 2.0f;
+    style.GrabRounding = 2.0f;
+    style.WindowBorderSize = 1.0f;
+    style.FrameBorderSize = 0.0f;
+    style.PopupBorderSize = 1.0f;
+    style.WindowPadding = ImVec2(8, 8);
+    style.FramePadding = ImVec2(4, 3);
+    style.ItemSpacing = ImVec2(8, 4);
+    style.ItemInnerSpacing = ImVec2(4, 4);
+}
+
 // Initialize ImGui GUI
 extern "C" tetra_gui_t* tetra_gui_init(tetra_config_t *config, detection_params_t *params,
                                         detection_status_t *status, rtl_sdr_t *sdr) {
@@ -106,8 +165,8 @@ extern "C" tetra_gui_t* tetra_gui_init(tetra_config_t *config, detection_params_
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     #endif
 
-    // Create window
-    gui->window = glfwCreateWindow(900, 700, "TETRA Analyzer Control Panel", NULL, NULL);
+    // Create window with professional title
+    gui->window = glfwCreateWindow(1200, 750, "TETRA TEA1 Analyzer - Professional Security Research Toolkit", NULL, NULL);
     if (gui->window == NULL) {
         fprintf(stderr, "Failed to create GLFW window\n");
         glfwTerminate();
@@ -124,15 +183,8 @@ extern "C" tetra_gui_t* tetra_gui_init(tetra_config_t *config, detection_params_
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-    // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-
-    // Customize style for better visibility
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 5.0f;
-    style.FrameRounding = 3.0f;
-    style.GrabRounding = 3.0f;
-    style.ScrollbarRounding = 3.0f;
+    // Setup professional Photoshop-like dark theme
+    setupImGuiStyle();
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(gui->window, true);
@@ -147,7 +199,8 @@ extern "C" tetra_gui_t* tetra_gui_init(tetra_config_t *config, detection_params_
 extern "C" void tetra_gui_run(tetra_gui_t *gui) {
     if (!gui) return;
 
-    ImVec4 clear_color = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+    // Match the Photoshop-like dark theme background
+    ImVec4 clear_color = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
 
     // Main loop
     while (!glfwWindowShouldClose(gui->window) && gui->running) {
@@ -171,11 +224,15 @@ extern "C" void tetra_gui_run(tetra_gui_t *gui) {
 
         // Menu bar
         if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("Exit", "Alt+F4")) {
+                    gui->running = false;
+                }
+                ImGui::EndMenu();
+            }
             if (ImGui::BeginMenu("View")) {
                 ImGui::MenuItem("Detection Parameters", NULL, &gui->show_params_window);
                 ImGui::MenuItem("Status & Statistics", NULL, &gui->show_stats_window);
-                ImGui::Separator();
-                ImGui::MenuItem("About", NULL, &gui->show_about_window);
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("Help")) {
@@ -184,6 +241,26 @@ extern "C" void tetra_gui_run(tetra_gui_t *gui) {
                 }
                 ImGui::EndMenu();
             }
+
+            // Add status indicator in menu bar
+            ImGui::Separator();
+            bool burst_detected = false;
+            if (gui->status) {
+                pthread_mutex_lock(&gui->status->lock);
+                burst_detected = gui->status->burst_detected;
+                pthread_mutex_unlock(&gui->status->lock);
+            }
+
+            if (burst_detected) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.00f));
+                ImGui::Text("  BURST DETECTED");
+                ImGui::PopStyleColor();
+            } else {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.70f, 0.70f, 0.70f, 1.00f));
+                ImGui::Text("  Monitoring %.1f MHz", gui->config->frequency / 1e6);
+                ImGui::PopStyleColor();
+            }
+
             ImGui::EndMainMenuBar();
         }
 
