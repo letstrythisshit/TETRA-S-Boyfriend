@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
-project(TETRA_TEA1_Analyzer C)
+project(TETRA_TEA1_Analyzer C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Optimization flags for ARM and low-resource systems
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm.*|ARM.*|aarch64.*|AARCH64.*")
@@ -29,10 +31,20 @@ find_library(PTHREAD_LIB pthread)
 find_library(M_LIB m)
 find_library(ASOUND_LIB asound)
 
-# Find GTK3 for GUI support
+# Find GLFW3 and OpenGL for ImGui GUI support
 find_package(PkgConfig)
 if(PKG_CONFIG_FOUND)
-    pkg_check_modules(GTK3 gtk+-3.0)
+    pkg_check_modules(GLFW3 glfw3)
+endif()
+
+# Try to find OpenGL
+find_package(OpenGL)
+
+# Check for OpenGL ES on ARM platforms
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm.*|ARM.*|aarch64.*|AARCH64.*")
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(GLES glesv2)
+    endif()
 endif()
 
 if(NOT RTLSDR_LIB)
@@ -49,15 +61,42 @@ else()
     add_definitions(-DHAVE_ALSA)
 endif()
 
-if(GTK3_FOUND)
-    message(STATUS "GTK3 found - GUI support enabled")
-    add_definitions(-DHAVE_GTK)
-    include_directories(${GTK3_INCLUDE_DIRS})
-    link_directories(${GTK3_LIBRARY_DIRS})
-    add_definitions(${GTK3_CFLAGS_OTHER})
+# Check for ImGui
+set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/external/imgui")
+if(EXISTS "${IMGUI_DIR}/imgui.h" AND GLFW3_FOUND AND (OPENGL_FOUND OR GLES_FOUND))
+    message(STATUS "Dear ImGui found - GUI support enabled")
+    add_definitions(-DHAVE_IMGUI)
+
+    # ImGui source files
+    set(IMGUI_SOURCES
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    )
+
+    # ImGui include directories
+    include_directories(${IMGUI_DIR})
+    include_directories(${IMGUI_DIR}/backends)
+    include_directories(${GLFW3_INCLUDE_DIRS})
+
+    if(GLES_FOUND)
+        message(STATUS "Using OpenGL ES 2.0 for GUI (ARM/Raspberry Pi)")
+        include_directories(${GLES_INCLUDE_DIRS})
+    else()
+        message(STATUS "Using desktop OpenGL for GUI")
+    endif()
+
+    set(HAVE_GUI TRUE)
 else()
-    message(WARNING "GTK3 not found - GUI support will be disabled")
-    message(STATUS "To enable: sudo apt-get install libgtk-3-dev")
+    message(WARNING "ImGui/GLFW3/OpenGL not found - GUI support will be disabled")
+    message(STATUS "To enable:")
+    message(STATUS "  1. Run: ./setup_imgui.sh")
+    message(STATUS "  2. Install: sudo apt-get install libglfw3-dev")
+    message(STATUS "  3. On ARM: sudo apt-get install libgles2-mesa-dev")
+    set(HAVE_GUI FALSE)
 endif()
 
 # Source files
@@ -76,9 +115,10 @@ set(SOURCES
     src/control_channel.c
 )
 
-# Add GUI source if GTK3 is available
-if(GTK3_FOUND)
-    list(APPEND SOURCES src/gui.c)
+# Add GUI sources if ImGui is available
+if(HAVE_GUI)
+    list(APPEND SOURCES src/imgui_gui.cpp)
+    list(APPEND SOURCES ${IMGUI_SOURCES})
 endif()
 
 # Main executable
@@ -92,9 +132,24 @@ target_link_libraries(tetra_analyzer
     ${ASOUND_LIB}
 )
 
-# Link GTK3 libraries if available
-if(GTK3_FOUND)
-    target_link_libraries(tetra_analyzer ${GTK3_LIBRARIES})
+# Link ImGui/GLFW/OpenGL libraries if available
+if(HAVE_GUI)
+    target_link_libraries(tetra_analyzer ${GLFW3_LIBRARIES})
+
+    # Link OpenGL or OpenGL ES
+    if(GLES_FOUND)
+        target_link_libraries(tetra_analyzer ${GLES_LIBRARIES})
+        message(STATUS "Linking OpenGL ES 2.0")
+    elseif(OPENGL_FOUND)
+        target_link_libraries(tetra_analyzer ${OPENGL_LIBRARIES})
+        message(STATUS "Linking desktop OpenGL")
+    endif()
+
+    # Additional libraries needed on some platforms
+    find_library(DL_LIB dl)
+    if(DL_LIB)
+        target_link_libraries(tetra_analyzer ${DL_LIB})
+    endif()
 endif()
 
 # Installation
